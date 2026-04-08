@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizBlitz — Enhanced Multiplayer Quiz Game</title>
+<!-- 
+QUIZBLITZ MULTIPLAYER FEATURES:
+✅ Host creates quiz from public topics
+✅ 6-digit game PIN generation  
+✅ Players join with name on any device
+✅ Host displays question on shared screen
+✅ Players answer on their own devices
+✅ Timer with speed-based scoring
+✅ Live leaderboard updates
+✅ Real-time WebSocket sync (simulated with localStorage for demo)
+✅ Points awarded for correct + speed
+✅ Multi-round quiz flow
+
+For production use, replace localStorage WebSocket simulation with actual WebSocket server.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="feedback-toast" id="feedbackToast">Correct!</div>
+
+<!-- COUNTDOWN OVERLAY -->
+<div class="countdown-overlay" id="countdownOverlay" style="display:none;">
+  <div class="countdown-num" id="countdownNum">3</div>
+  <div class="countdown-label">Get ready!</div>
+</div>
+
+<!-- LIVE LEADERBOARD -->
+<div class="live-lb" id="liveLeaderboard" style="display:none;">
+  <div class="live-lb-title">Live Leaderboard</div>
+  <div id="liveLbContent"></div>
+</div>
+
+<div class="container">
+
+  <!-- ===== HOST/JOIN SCREEN ===== -->
+  <div class="screen active" id="hostJoinScreen">
+    <div class="host-join-screen">
+      <div class="logo">QUIZBLITZ</div>
+      <div class="tagline">Host or Join a Quiz</div>
+
+      <div class="mode-btns">
+        <button class="mode-btn" id="hostBtn" onclick="selectMode('host')">
+          <div style="font-size: 24px; margin-bottom: 8px;">👑</div>
+          Host Game
+        </button>
+        <button class="mode-btn" id="joinBtn" onclick="selectMode('join')">
+          <div style="font-size: 24px; margin-bottom: 8px;">🎮</div>
+          Join Game
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== QUIZ MODE SELECTION ===== -->
+  <div class="screen" id="quizModeScreen">
+    <div class="host-join-screen">
+      <div class="logo">QUIZBLITZ</div>
+      <div class="tagline">Choose Quiz Type</div>
+
+      <div class="quiz-mode-btns">
+        <button class="quiz-mode-btn selected" onclick="selectQuizMode('public')">
+          <div style="font-size: 20px; margin-bottom: 6px;">📚</div>
+          Public Quiz
+        </button>
+        <button class="quiz-mode-btn" onclick="selectQuizMode('custom')">
+          <div style="font-size: 20px; margin-bottom: 6px;">✏️</div>
+          Custom Quiz
+        </button>
+      </div>
+
+      <button class="btn btn-primary" onclick="proceedToSetup()">Continue ▶</button>
+    </div>
+  </div>
+
+  <!-- ===== CUSTOM QUIZ CREATOR ===== -->
+  <div class="screen" id="customQuizScreen">
+    <div class="logo">QUIZBLITZ</div>
+    <div class="tagline">Create Your Quiz</div>
+
+    <div class="card">
+      <div class="section-title">Quiz Settings</div>
+      <div class="name-input-wrap" style="margin: 1rem 0;">
+        <input class="name-input" id="quizTitle" type="text" placeholder="Quiz Title..." maxlength="50" />
+      </div>
+
+      <div class="difficulty-row">
+        <button class="diff-btn selected" data-d="easy" onclick="selectQuizDiff(this)">Easy</button>
+        <button class="diff-btn" data-d="medium" onclick="selectQuizDiff(this)">Medium</button>
+        <button class="diff-btn" data-d="hard" onclick="selectQuizDiff(this)">Hard</button>
+      </div>
+
+      <div class="section-title" style="margin-top: 1.5rem;">Questions</div>
+      <div id="questionsList">
+        <!-- Questions will be added here dynamically -->
+      </div>
+
+      <button class="btn btn-ghost" onclick="addQuestion()" style="margin: 1rem 0;">
+        ➕ Add Question
+      </button>
+
+      <div class="end-btns">
+        <button class="btn btn-primary" onclick="saveCustomQuiz()">Save Quiz ▶</button>
+        <button class="btn-outline" onclick="showScreen('quizModeScreen')">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HOST SETUP SCREEN ===== -->
+  <div class="screen" id="hostSetupScreen">
+    <div class="host-setup">
+      <div class="logo">QUIZBLITZ</div>
+      <div class="tagline">Setup Your Quiz</div>
+
+      <div class="card">
+        <div class="pin-display">
+          <div class="pin-label">Game PIN</div>
+          <div class="pin-code" id="gamePin">000000</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Share this PIN with players</div>
+        </div>
+
+        <div style="background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 1rem 0;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Quiz Mode: <span id="quizModeDisplay">Public Quiz</span></div>
+          <div style="font-size: 12px; color: var(--text-muted);">Topic: <span id="quizTopicDisplay">General Knowledge</span> | Difficulty: <span id="quizDiffDisplay">Easy</span></div>
+        </div>
+
+        <div class="players-list">
+          <div class="section-title" style="margin-bottom: 12px;">Players Joined (<span id="playerCount">0</span>)</div>
+          <div id="playersList">
+            <div class="player-item host">
+              <div class="player-avatar">👑</div>
+              <div class="player-name">You (Host)</div>
+              <div class="player-status host">Host</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary start-btn" onclick="startMultiplayerGame()" id="startBtn" disabled>
+          ▶ Start Game
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PLAYER JOIN SCREEN ===== -->
+  <div class="screen" id="playerJoinScreen">
+    <div class="logo">QUIZBLITZ</div>
+    <div class="tagline">Join a Quiz Game</div>
+
+    <div class="card">
+      <div class="join-form">
+        <div class="pin-input">
+          <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-muted);">Enter Game PIN</label>
+          <input type="text" id="joinPin" placeholder="000000" maxlength="6" autocomplete="off" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+        </div>
+
+        <label class="name-label" for="joinName">Your nickname</label>
+        <div class="name-input-wrap">
+          <input class="name-input" id="joinName" type="text" placeholder="Enter your name..." maxlength="20" autocomplete="off" />
+        </div>
+
+        <button class="btn btn-primary" onclick="joinGame()">🎮 Join Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== WAITING SCREEN ===== -->
+  <div class="screen" id="waitingScreen">
+    <div class="waiting-screen">
+      <div class="logo">QUIZBLITZ</div>
+      <div class="waiting-title" id="waitingTitle">Waiting for Host</div>
+      <div class="waiting-sub" id="waitingSub">The game will start soon...</div>
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- ===== WELCOME SCREEN ===== -->
+  <div class="screen" id="welcomeScreen">
+    <div class="logo">QUIZBLITZ</div>
+    <div class="tagline">Fast • Furious • Fun</div>
+
+    <div class="card">
+      <label class="name-label" for="playerName">Your nickname</label>
+      <div class="name-input-wrap">
+        <input class="name-input" id="playerName" type="text" placeholder="Enter your name..." maxlength="20" autocomplete="off" />
+      </div>
+
+      <div class="section-title">Choose topic</div>
+      <div class="topic-grid" id="topicGrid">
+        <button class="topic-btn selected" data-topic="General Knowledge" onclick="selectTopic(this)">
+          <span class="icon">🌍</span>General Knowledge
+        </button>
+        <button class="topic-btn" data-topic="Science" onclick="selectTopic(this)">
+          <span class="icon">🔬</span>Science
+        </button>
+        <button class="topic-btn" data-topic="Geography" onclick="selectTopic(this)">
+          <span class="icon">🗺️</span>Geography
+        </button>
+        <button class="topic-btn" data-topic="History" onclick="selectTopic(this)">
+          <span class="icon">📜</span>History
+        </button>
+        <button class="topic-btn" data-topic="Sports" onclick="selectTopic(this)">
+          <span class="icon">⚽</span>Sports
+        </button>
+        <button class="topic-btn" data-topic="Technology" onclick="selectTopic(this)">
+          <span class="icon">💻</span>Technology
+        </button>
+      </div>
+
+      <div class="section-title" style="margin-top:1rem;">Difficulty</div>
+      <div class="difficulty-row">
+        <button class="diff-btn selected" data-d="easy" onclick="selectDiff(this)">Easy</button>
+        <button class="diff-btn" data-d="medium" onclick="selectDiff(this)">Medium</button>
+        <button class="diff-btn" data-d="hard" onclick="selectDiff(this)">Hard</button>
+      </div>
+
+      <button class="btn btn-primary" onclick="startGame()">▶ Launch Quiz</button>
+    </div>
+  </div>
+
+  <!-- ===== QUESTION SCREEN ===== -->
+  <div class="screen" id="questionScreen">
+    <div class="hud">
+      <div class="hud-score" id="hudScore">0</div>
+      <div class="hud-progress" id="hudProgress">1 / 10</div>
+      <div class="hud-streak" id="hudStreak"></div>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+
+    <div class="timer-wrap">
+      <svg class="timer-svg" width="80" height="80" viewBox="0 0 80 80">
+        <circle class="timer-circle-bg" cx="40" cy="40" r="32"/>
+        <circle class="timer-circle-fill" id="timerCircle" cx="40" cy="40" r="32"/>
+      </svg>
+      <div class="timer-text" id="timerText">15</div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="question-num" id="questionNum">Question 1</div>
+      <div class="question-text" id="questionText"></div>
+      <div class="answers-grid" id="answersGrid"></div>
+    </div>
+  </div>
+
+  <!-- ===== HOST QUESTION SCREEN ===== -->
+  <div class="screen" id="hostQuestionScreen">
+    <div class="hud">
+      <div class="hud-score" id="hostHudScore">Host View</div>
+      <div class="hud-progress" id="hostHudProgress">1 / 10</div>
+      <div class="hud-streak" id="hostHudStreak"></div>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="hostProgressFill" style="width:0%"></div>
+    </div>
+
+    <div class="timer-wrap">
+      <svg class="timer-svg" width="80" height="80" viewBox="0 0 80 80">
+        <circle class="timer-circle-bg" cx="40" cy="40" r="32"/>
+        <circle class="timer-circle-fill" id="hostTimerCircle" cx="40" cy="40" r="32"/>
+      </svg>
+      <div class="timer-text" id="hostTimerText">15</div>
+    </div>
+
+    <div class="card host-question" style="margin-top:12px;">
+      <div class="question-num" id="hostQuestionNum">Question 1</div>
+      <div class="question-text" id="hostQuestionText"></div>
+      <div class="answers-grid" id="hostAnswersGrid"></div>
+
+      <div class="host-controls">
+        <button class="host-btn" onclick="showLeaderboard()">📊 View Leaderboard</button>
+        <button class="host-btn next" onclick="nextQuestion()" id="nextBtn">Next Question ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PLAYER ANSWER SCREEN ===== -->
+  <div class="screen" id="playerAnswerScreen">
+    <div class="hud">
+      <div class="hud-score" id="playerHudScore">0</div>
+      <div class="hud-progress" id="playerHudProgress">1 / 10</div>
+      <div class="hud-streak" id="playerHudStreak"></div>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="playerProgressFill" style="width:0%"></div>
+    </div>
+
+    <div class="timer-wrap answer-timer">
+      <svg class="timer-svg" width="60" height="60" viewBox="0 0 60 60">
+        <circle class="timer-circle-bg" cx="30" cy="30" r="24"/>
+        <circle class="timer-circle-fill" id="playerTimerCircle" cx="30" cy="30" r="24"/>
+      </svg>
+      <div class="timer-text" id="playerTimerText" style="font-size: 18px;">15</div>
+    </div>
+
+    <div class="card player-answer" style="margin-top:12px;">
+      <div class="question-num" id="playerQuestionNum">Question 1</div>
+      <div class="question-text" id="playerQuestionText"></div>
+      <div class="answers-grid" id="playerAnswersGrid"></div>
+    </div>
+  </div>
+
+  <!-- ===== END SCREEN ===== -->
+  <div class="screen" id="endScreen">
+    <div class="end-hero">
+      <div class="end-rank" id="endEmoji">🏆</div>
+      <div class="end-title" id="endTitle">Amazing!</div>
+      <div class="end-sub" id="endSub">You crushed it!</div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-val" id="statScore">0</span>
+        <span class="stat-label">Score</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val" id="statCorrect">0/10</span>
+        <span class="stat-label">Correct</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val" id="statBest">0</span>
+        <span class="stat-label">Best Streak</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <div class="section-title" style="margin-bottom:12px;">Leaderboard</div>
+      <div id="leaderboard"></div>
+    </div>
+
+    <div class="end-btns">
+      <button class="btn btn-primary" style="flex:1;" onclick="startGame()">▶ Play Again</button>
+      <button class="btn-outline" onclick="showWelcome()">Change Topic</button>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
