@@ -453,6 +453,16 @@ function initWebSocket() {
     }, 3000);
   };
 
+  state.ws.onclose = () => {
+    console.log('WebSocket connection closed');
+    // Attempt to reconnect after a delay
+    setTimeout(() => {
+      if (!state.ws || state.ws.readyState === WebSocket.CLOSED) {
+        initWebSocket();
+      }
+    }, 3000);
+  };
+
   state.ws.onerror = (error) => {
     console.error('WebSocket error:', error);
   };

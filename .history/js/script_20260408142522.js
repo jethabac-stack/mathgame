@@ -453,6 +453,16 @@ function initWebSocket() {
     }, 3000);
   };
 
+  state.ws.onclose = () => {
+    console.log('WebSocket connection closed');
+    // Attempt to reconnect after a delay
+    setTimeout(() => {
+      if (!state.ws || state.ws.readyState === WebSocket.CLOSED) {
+        initWebSocket();
+      }
+    }, 3000);
+  };
+
   state.ws.onerror = (error) => {
     console.error('WebSocket error:', error);
   };
@@ -500,9 +510,6 @@ function handleMessage(msg) {
       // Update waiting screen to show successful join
       document.getElementById('waitingTitle').textContent = 'Joined Game!';
       document.getElementById('waitingSub').textContent = 'Waiting for host to start...';
-      if (state.isHost) {
-        updatePlayersList();
-      }
       break;
     case 'join':
       if (state.isHost) {
